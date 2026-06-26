@@ -1,6 +1,7 @@
 #include "skiplist/skiplist.h"
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <tuple>
@@ -27,9 +28,10 @@ bool SkipListIterator::operator!=(const BaseIterator &other) const {
 }
 
 SkipListIterator::value_type SkipListIterator::operator*() const {
-  // TODO: Lab1.2 任务：实现SkipListIterator的*操作符
-  // ? 若 current 为空需抛出异常
-  return {"", ""};
+  if (!current) {
+    throw std::runtime_error("Dereferencing invalid iterator");
+  }
+  return {current->key_, current->value_};
 }
 
 IteratorType SkipListIterator::get_type() const {
@@ -57,45 +59,118 @@ SkipList::SkipList(int max_lvl) : max_level(max_lvl), current_level(1) {
 }
 
 int SkipList::random_level() {
-  // ? 通过"抛硬币"的方式随机生成层数：
-  // ? - 每次有50%的概率增加一层
-  // ? - 确保层数分布为：第1层100%，第2层50%，第3层25%，以此类推
-  // ? - 层数范围限制在[1, max_level]之间，避免浪费内存
-  // TODO: Lab1.1 任务：插入时随机为这一次操作确定其最高连接的链表层数
-  return 0;
+  int lv = 1;
+  while (dis_01(gen) == 1 && lv < max_level) {
+    lv++;
+  }
+  return lv;
 }
 
 // 插入或更新键值对
 void SkipList::put(const std::string &key, const std::string &value,
                    uint64_t tranc_id) {
-  spdlog::trace("SkipList--put({}, {}, {})", key, value, tranc_id);
-
-  // TODO: Lab1.1 任务：实现插入或更新键值对
-  // ? Hint: 你需要保证不同`Level`的步长从底层到高层逐渐增加
-  // ? 你可能需要使用到`random_level`函数以确定层数, 其注释中为你提供一种思路
-  // ? tranc_id 为事务id, 直接将其传递到 SkipListNode 的构造函数中即可
-  // ? 若key存在且tranc_id相同, 仅更新value; 否则插入新节点
-  // ? 注意维护 size_bytes
+  spdlog::trace("SkipList--put({}, {}, {}) called", key, value, tranc_id);
+  auto current = head;
+  std::vector<std::shared_ptr<SkipListNode>> update(max_level, head);
+  for(int lv = current_level - 1; lv >= 0; --lv)  {
+    while(current->forward_[lv] && current->forward_[lv]->key_ < key) {
+      current = current->forward_[lv];
+    }
+    update[lv] = current;
+  }
+  auto target = update[0]->forward_[0];
+  // update
+  if (target && target->key_ == key && target->tranc_id_ == tranc_id) {
+    size_bytes = size_bytes + value.size() - target->value_.size();
+    target->value_ = value;
+    spdlog::trace("SkipList--put({}, {}, {}), key and tranc_id_ is the same, "
+                  "only update value to {}",
+                  key, value, tranc_id, value);
+    return;
+  }
+  // insert
+  int insrt_level = random_level();
+  auto new_node = std::make_shared<SkipListNode>(key, value,
+                      insrt_level, tranc_id);
+  for (int lv = 0; lv < insrt_level; lv++) {
+    target = update[lv]->forward_[lv];
+    new_node->set_backward(lv, update[lv]);
+    update[lv]->forward_[lv] = new_node;
+    new_node->forward_[lv] = target;
+    if (target) {
+      target->set_backward(lv, new_node);
+    }
+  }
+  spdlog::trace("SkipList--put({}, {}, {}),  insert at level {}",
+                  key, value, tranc_id, insrt_level);
+  current_level = current_level > insrt_level ? current_level : insrt_level;
+  size_bytes += new_node->key_.size() + new_node->value_.size() + sizeof(uint64_t);
 }
 
 // 查找键值对
 SkipListIterator SkipList::get(const std::string &key, uint64_t tranc_id) {
   spdlog::trace("SkipList--get({}) called", key);
 
-  // TODO: Lab1.1 任务：实现查找键值对
-  // ? 从最高层开始向下查找, 最终在底层确认 key 是否存在
-  // ? 若 tranc_id == 0, 直接比较 key 返回; 否则需满足事务可见性 (tranc_id_ <= tranc_id)
-  // TODO: 完成查找后还需要额外实现SkipListIterator中的TODO部分(Lab1.2)
-  return SkipListIterator{};
+  auto current = head;
+  for(int lv = current_level - 1; lv >= 0; --lv)  {
+    while (current->forward_[lv] && current->forward_[lv]->key_ < key)  {
+        current = current->forward_[lv];
+    }
+  }
+
+  auto target = current->forward_[0];
+  if (tranc_id != 0) {
+    while (target && target->key_ == key && tranc_id < target->tranc_id_) {
+      target = target->forward_[0];
+    }
+  }
+  if (target && target->key_ == key) {
+    return SkipListIterator(target);
+  }
+
+  return end();
 }
 
 // 删除键值对
 // ! 这里的 remove 是跳表本身真实的 remove,  lsm 应该使用 put 空值表示删除,
 // ! 这里只是为了实现完整的 SkipList 不会真正被上层调用
 void SkipList::remove(const std::string &key) {
-  // TODO: Lab1.1 任务：实现删除键值对
-  // ? 从最高层开始查找目标节点并更新各层指针
-  // ? 注意同时维护 backward_ 指针和 size_bytes
+  std::vector<std::shared_ptr<SkipListNode>> update(max_level, head);
+  auto current = head;
+
+  for (int lv = current_level - 1; lv >= 0; --lv) {
+    while (current->forward_[lv] && current->forward_[lv]->key_ < key) {
+      current = current->forward_[lv];
+    }
+    update[lv] = current;
+  }
+
+  auto target = update[0]->forward_[0];
+  if (!target || target->key_ != key) {
+    return;
+  }
+
+  for (size_t lv = 0; lv < target->forward_.size(); ++lv) {
+    if (update[lv]->forward_[lv] != target) {
+      continue;
+    }
+
+    auto next = target->forward_[lv];
+    update[lv]->forward_[lv] = next;
+    if (next) {
+      next->set_backward(static_cast<int>(lv), update[lv]);
+    }
+  }
+
+  while (current_level > 1 && !head->forward_[current_level - 1]) {
+    --current_level;
+  }
+
+  const size_t removed_size = target->key_.size() + target->value_.size() +
+                              sizeof(uint64_t);
+  size_bytes = size_bytes >= removed_size ? size_bytes - removed_size : 0;
+
+  return;
 }
 
 // 刷盘时可以直接遍历最底层链表
