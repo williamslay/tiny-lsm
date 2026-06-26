@@ -333,3 +333,101 @@ task("run-all-tests")
 
         print("\27[32mAll tests finished.\27[0m")
     end)
+
+local function lldb_context(project, env)
+    local function target_names()
+        local names = {}
+        for name, target in pairs(project.targets()) do
+            if target:kind() == "binary" then
+                table.insert(names, name)
+            end
+        end
+        table.sort(names)
+        return names
+    end
+
+    local function resolve_target(target_name)
+        target_name = (target_name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        if target_name == "" then
+            env.raise("missing target; use -t TARGET. Debuggable targets: %s", table.concat(target_names(), ", "))
+        end
+
+        local target = project.target(target_name)
+        if not target or target:kind() ~= "binary" then
+            env.raise("debuggable target not found: %s. Debuggable targets: %s", target_name, table.concat(target_names(), ", "))
+        end
+
+        return target_name, target
+    end
+
+    local function program()
+        local lldb = env.os.iorunv("sh", {"-c", "command -v lldb 2>/dev/null || command -v lldb-18 2>/dev/null"}):gsub("%s+$", "")
+        if lldb == "" then
+            env.raise("lldb not found; install lldb or lldb-18")
+        end
+        return lldb
+    end
+
+    local function targetfile(target_name, target)
+        local file = target:targetfile()
+        if not env.os.isfile(file) then
+            local show = env.os.iorunv("xmake", {"show", "-t", target_name})
+            show = show:gsub("\27%[[0-9;]*m", "")
+            file = show:match("targetfile:%s*([^\r\n]+)") or file
+        end
+        if not env.os.isfile(file) then
+            env.raise("target file not found: %s", file)
+        end
+        return file
+    end
+
+    return {
+        resolve_target = resolve_target,
+        program = program,
+        targetfile = targetfile
+    }
+end
+
+task("lldb")
+    set_category("plugin")
+    set_menu {
+        usage = "xmake lldb [-t|--target TARGET]",
+        description = "Build a target and run it under LLDB",
+        options = {
+            {'t', "target", "kv", "", "Binary target to debug"}
+        }
+    }
+
+    on_run(function ()
+        import("core.project.project")
+        import("core.base.option")
+
+        local lldb = lldb_context(project, {os = os, raise = raise})
+        local target_name, target = lldb.resolve_target(option.get("target"))
+        local program = lldb.program()
+
+        os.execv("xmake", {"build", target_name})
+        os.execv(program, {"--", lldb.targetfile(target_name, target)})
+    end)
+
+task("lldb-bt")
+    set_category("plugin")
+    set_menu {
+        usage = "xmake lldb-bt [-t|--target TARGET]",
+        description = "Build a target, run it under LLDB, and print a backtrace on crash",
+        options = {
+            {'t', "target", "kv", "", "Binary target to debug"}
+        }
+    }
+
+    on_run(function ()
+        import("core.project.project")
+        import("core.base.option")
+
+        local lldb = lldb_context(project, {os = os, raise = raise})
+        local target_name, target = lldb.resolve_target(option.get("target"))
+        local program = lldb.program()
+
+        os.execv("xmake", {"build", target_name})
+        os.execv(program, {"-b", "-o", "run", "-k", "bt", "--", lldb.targetfile(target_name, target)})
+    end)
