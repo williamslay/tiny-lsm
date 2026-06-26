@@ -115,7 +115,7 @@ SkipListIterator SkipList::get(const std::string &key, uint64_t tranc_id) {
   auto current = head;
   for(int lv = current_level - 1; lv >= 0; --lv)  {
     while (current->forward_[lv] && current->forward_[lv]->key_ < key)  {
-        current = current->forward_[lv];
+      current = current->forward_[lv];
     }
   }
 
@@ -215,16 +215,47 @@ SkipListIterator SkipList::end() {
 // 找到前缀的起始位置
 // 返回第一个前缀匹配或者大于前缀的迭代器
 SkipListIterator SkipList::begin_preffix(const std::string &preffix) {
-  // TODO: Lab1.3 任务：实现前缀查询的起始位置
-  // ? 从最高层开始查找, 找到第一个 key >= preffix 的节点
-  return SkipListIterator{};
+  spdlog::trace("SkipList--begin_preffix('{}') called", preffix);
+
+  auto current = head;
+  for(int lv = current_level - 1; lv >= 0; --lv)  {
+    while (current->forward_[lv] && current->forward_[lv]->key_ < preffix)  {
+        current = current->forward_[lv];
+    }
+  }
+
+  current = current->forward_[0];
+  if (current && current->key_ == preffix) {
+    spdlog::trace("SkipList--begin_preffix('{}'): first match at '{}'",
+                   preffix, current->key_);
+  }
+  return SkipListIterator(current);
 }
 
 // 找到前缀的终结位置
 SkipListIterator SkipList::end_preffix(const std::string &prefix) {
-  // TODO: Lab1.3 任务：实现前缀查询的终结位置
-  // ? 找到第一个 key 不以 prefix 开头的节点作为终结位置
-  return SkipListIterator{};
+  spdlog::trace("SkipList--end_preffix('{}') called", prefix);
+
+  auto current = head;
+  for (int lv = current_level - 1; lv >= 0; --lv) {
+    while (current->forward_[lv] && current->forward_[lv]->key_ < prefix) {
+      current = current->forward_[lv];
+    }
+  }
+
+  current = current->forward_[0];
+  while (current && current->key_.substr(0, prefix.size()) == prefix) {
+    current = current->forward_[0];
+  }
+
+  if (current) {
+    spdlog::trace("SkipList--begin_preffix('{}'): end at '{}'", prefix,
+                  current->key_);
+  } else {
+    spdlog::trace("SkipList--begin_preffix('{}'): end at the skiplist end",
+                  prefix);
+  }
+  return SkipListIterator(current);
 }
 
 // ? 这里单调谓词的含义是, 整个数据库只会有一段连续区间满足此谓词
@@ -244,7 +275,23 @@ SkipList::iters_monotony_predicate(
   // ? 分两步: 1. 利用多层跳表快速找到谓词满足区间内的一个节点
   // ?         2. 分别向前/向后扩展, 利用 backward_ 和 forward_ 确定区间边界
   // ? 注意: 向前查找时需要利用 backward_ 指针从当前节点的最高层开始回溯
-  return std::nullopt;
+  auto current = head;
+  for (int lv = current_level - 1; lv >= 0; --lv) {
+    while (current->forward_[lv] && predicate(current->forward_[lv]->key_) >= 0) {
+      current = current->forward_[lv];
+    }
+  }
+
+  if (predicate(current->key_) != 0) {
+    return std::nullopt;
+  }
+  SkipListIterator end_(current->forward_[0]);
+  while (current->backward_[0].lock() &&
+        predicate(current->backward_[0].lock()->key_) == 0) {
+    current = current->backward_[0].lock();
+  }
+  SkipListIterator begin_(current);
+  return std::make_pair(begin_, end_);
 }
 
 // ? 打印跳表, 你可以在出错时调用此函数进行调试
