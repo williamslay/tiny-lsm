@@ -11,20 +11,23 @@ namespace tiny_lsm {
 
 // ************************ SkipListIterator ************************
 BaseIterator &SkipListIterator::operator++() {
-  // TODO: Lab1.2 任务：实现SkipListIterator的++操作符
-  // ? current 是当前节点指针, forward_[0] 是最底层链表的下一个节点
+  if (current) {
+    current = current->forward_[0];
+  }
   return *this;
 }
 
 bool SkipListIterator::operator==(const BaseIterator &other) const {
-  // TODO: Lab1.2 任务：实现SkipListIterator的==操作符
-  // ? 需要先通过 get_type() 判断类型再做 dynamic_cast
-  return false;
+  const auto *other_iter =
+                          dynamic_cast<const SkipListIterator *>(&other);
+  if (!other_iter) {
+    return false;
+  }
+  return current == other_iter->current;
 }
 
 bool SkipListIterator::operator!=(const BaseIterator &other) const {
-  // TODO: Lab1.2 任务：实现SkipListIterator的!=操作符
-  return true;
+  return !(*this == other);
 }
 
 SkipListIterator::value_type SkipListIterator::operator*() const {
@@ -35,9 +38,7 @@ SkipListIterator::value_type SkipListIterator::operator*() const {
 }
 
 IteratorType SkipListIterator::get_type() const {
-  // TODO: Lab1.2 任务：实现SkipListIterator的get_type
-  // ? 主要是为了熟悉基类的定义和继承关系, 返回 IteratorType::SkipListIterator
-  return IteratorType::SkipListIterator; // placeholder, 请替换为正确实现
+  return IteratorType::SkipListIterator;
 }
 
 bool SkipListIterator::is_valid() const {
