@@ -271,10 +271,6 @@ SkipListIterator SkipList::end_preffix(const std::string &prefix) {
 std::optional<std::pair<SkipListIterator, SkipListIterator>>
 SkipList::iters_monotony_predicate(
     std::function<int(const std::string &)> predicate) {
-  // TODO: Lab1.3 任务：实现谓词查询
-  // ? 分两步: 1. 利用多层跳表快速找到谓词满足区间内的一个节点
-  // ?         2. 分别向前/向后扩展, 利用 backward_ 和 forward_ 确定区间边界
-  // ? 注意: 向前查找时需要利用 backward_ 指针从当前节点的最高层开始回溯
   auto current = head;
   for (int lv = current_level - 1; lv >= 0; --lv) {
     while (current->forward_[lv] && predicate(current->forward_[lv]->key_) >= 0) {
