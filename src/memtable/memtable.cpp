@@ -7,6 +7,7 @@
 #include "spdlog/spdlog.h"
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -291,19 +292,41 @@ size_t MemTable::get_total_size() {
   return get_frozen_size() + get_cur_size();
 }
 
+// TODO: check, jsut for memory usage?
+// ? 过滤 tranc_id 不可见的记录 (tranc_id != 0 && iter.get_tranc_id() > tranc_id)
+void static set_heap_iterator_item(std::vector<SearchItem> &item_vec,
+  std::shared_ptr<SkipList> table_ptr, uint64_t skiplist_idx, uint64_t tranc_id) {
+  for (auto iter = table_ptr->begin(); iter != table_ptr->end();
+       ++iter) {
+    if (tranc_id != 0 && iter.get_tranc_id() > tranc_id) {
+      continue;
+    }
+    item_vec.emplace_back(iter.get_key(), iter.get_value(), skiplist_idx, 0,
+                          iter.get_tranc_id());
+  }
+}
+
 // TODO: 需要进一步判断这里的 HeapIterator 能否跳过删除元素
 HeapIterator MemTable::begin(uint64_t tranc_id) {
-  // TODO: Lab2.2 MemTable 的迭代器
-  // ? 加 cur_mtx 和 frozen_mtx 读锁, 遍历所有表收集 SearchItem
-  // ? 每个 item 包含 key, value, table_idx, 0, tranc_id
-  // ? 过滤 tranc_id 不可见的记录 (tranc_id != 0 && iter.get_tranc_id() > tranc_id)
-  // ? 返回 HeapIterator(item_vec, tranc_id)
-  return {};
+  std::shared_lock<std::shared_mutex> slk1(cur_mtx);
+  std::shared_lock<std::shared_mutex> slk2(frozen_mtx);
+  std::vector<SearchItem> item_vec;
+  int table_idx = 0;
+
+  // current table
+  set_heap_iterator_item(item_vec, current_table, table_idx, tranc_id);
+  // frozen table
+  for (auto ft = frozen_tables.begin(); ft != frozen_tables.end(); ft++) {
+    table_idx++;
+    set_heap_iterator_item(item_vec, *ft, table_idx, tranc_id);
+  }
+
+  return HeapIterator(item_vec, tranc_id);
 }
 
 HeapIterator MemTable::end() {
-  // TODO: Lab2.2 MemTable 的迭代器
-  // ? 加读锁后返回空 HeapIterator
+  std::shared_lock<std::shared_mutex> slk1(cur_mtx);
+  std::shared_lock<std::shared_mutex> slk2(frozen_mtx);
   return HeapIterator{};
 }
 
