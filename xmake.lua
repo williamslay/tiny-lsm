@@ -18,6 +18,7 @@ add_requires("asio")
 add_requires("pybind11")
 add_requires("spdlog", { system = false })
 add_requires("toml11", { system = false })
+add_requires("crc32c", { system = false })
 
 if is_mode("debug") then
     add_defines("LSM_DEBUG")
@@ -28,7 +29,7 @@ target("logger")
     add_files("src/logger/*.cpp")
     add_packages("spdlog")
     add_includedirs("include", {public = true})
-    
+
 target("config")
     set_kind("static")
     add_files("src/config/*.cpp")
@@ -38,14 +39,14 @@ target("config")
 target("utils")
     set_kind("static")
     add_files("src/utils/*.cpp")
-    add_packages("toml11", "spdlog")
+    add_packages("toml11", "spdlog", "crc32c")
     add_includedirs("include", {public = true})
 
 target("vlog")
     set_kind("static")
     add_deps("utils", "config")
     add_files("src/vlog/*.cpp")
-    add_packages("toml11", "spdlog")
+    add_packages("toml11", "spdlog", "crc32c")
     add_includedirs("include", {public = true})
 
 target("iterator")
@@ -71,7 +72,7 @@ target("block")
     set_kind("static")
     add_deps("config")
     add_files("src/block/*.cpp")
-    add_packages("toml11", "spdlog")
+    add_packages("toml11", "spdlog", "crc32c")
     add_includedirs("include", {public = true})
 
 target("sst")
@@ -111,7 +112,7 @@ target("lsm_shared")
               "src/iterator/*.cpp", "src/skiplist/*.cpp", "src/memtable/*.cpp",
               "src/block/*.cpp", "src/sst/*.cpp", "src/wal/*.cpp", "src/lsm/*.cpp",
               "src/redis_wrapper/*.cpp")
-    add_packages("toml11", "spdlog")
+    add_packages("toml11", "spdlog", "crc32c")
     add_includedirs("include", {public = true})  -- 确保包含路径正确
     set_targetdir("$(buildir)/lib")
 
@@ -248,7 +249,7 @@ target("test_wisckey")
 target("example")
     set_kind("binary")
     add_files("example/main.cpp")
-    add_deps("logger", "config", "utils", "iterator", "skiplist", 
+    add_deps("logger", "config", "utils", "iterator", "skiplist",
              "memtable", "block", "sst", "wal", "lsm", "redis")
     add_includedirs("include")  -- 显式添加包含路径
     set_targetdir("$(buildir)/bin")
@@ -256,7 +257,7 @@ target("example")
 target("debug")
     set_kind("binary")
     add_files("example/debug.cpp")
-    add_deps("logger", "config", "utils", "iterator", "skiplist", 
+    add_deps("logger", "config", "utils", "iterator", "skiplist",
              "memtable", "block", "sst", "wal", "lsm", "redis")
     add_includedirs("include")  -- 显式添加包含路径
     set_targetdir("$(buildir)/bin")

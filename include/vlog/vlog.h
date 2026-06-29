@@ -16,7 +16,7 @@ namespace tiny_lsm {
  * [key     : key_len bytes]
  * [val_len : uint32]
  * [value   : val_len bytes]
- * [crc32   : uint32]   <- covers all above fields
+ * [crc32c  : uint32]   <- covers all above fields
  *
  * Reference stored in SST block value field (12 bytes):
  * [vlog_offset: uint64]  <- byte offset of record start in vlog.data

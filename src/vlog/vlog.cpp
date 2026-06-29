@@ -1,5 +1,6 @@
 #include "vlog/vlog.h"
 #include "spdlog/spdlog.h"
+#include <crc32c/crc32c.h>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -8,22 +9,6 @@
 #include <vector>
 
 namespace tiny_lsm {
-
-// Simple CRC32 implementation (polynomial 0xEDB88320)
-static uint32_t crc32_compute(const uint8_t *data, size_t len) {
-    uint32_t crc = 0xFFFFFFFF;
-    for (size_t i = 0; i < len; ++i) {
-        crc ^= data[i];
-        for (int j = 0; j < 8; ++j) {
-            if (crc & 1) {
-                crc = (crc >> 1) ^ 0xEDB88320;
-            } else {
-                crc >>= 1;
-            }
-        }
-    }
-    return crc ^ 0xFFFFFFFF;
-}
 
 std::shared_ptr<VLog> VLog::open(const std::string &path) {
     // TODO: Lab 6.1 打开或创建 VLog 文件
@@ -43,8 +28,8 @@ std::shared_ptr<VLog> VLog::open(const std::string &path) {
 
 uint64_t VLog::append(const std::string &key, const std::string &value) {
     // TODO: Lab 6.1 追加一条 KV 记录到 VLog, 返回记录起始偏移量
-    // ? 记录格式: [key_len:uint16][key][val_len:uint32][value][crc32:uint32]
-    // ? CRC32 覆盖除自身之外的所有字段
+    // ? 记录格式: [key_len:uint16][key][val_len:uint32][value][crc32c:uint32]
+    // ? CRC32C 覆盖除自身之外的所有字段
     // ? 注意: 需要加 append_mtx_ 互斥锁
     // ? offset = file_.size() (追加前的文件大小即为本次记录的起始位置)
     std::lock_guard<std::mutex> lock(append_mtx_);
