@@ -330,21 +330,94 @@ HeapIterator MemTable::end() {
   return HeapIterator{};
 }
 
+// TODO: check, jsut for memory usage?
+// ? 过滤 tranc_id 不可见的记录 (tranc_id != 0 && iter.get_tranc_id() > tranc_id)
+// ? 同 key 只保留最新版本
+void static set_heap_iterator_item_prefix(std::vector<SearchItem> &item_vec,
+  std::shared_ptr<SkipList> table_ptr, uint64_t skiplist_idx,
+  const std::string &preffix, uint64_t tranc_id) {
+  for (auto iter = table_ptr->begin_preffix(preffix);
+   iter != table_ptr->end_preffix(preffix); ++iter) {
+    if (tranc_id != 0 && iter.get_tranc_id() > tranc_id) {
+      continue;
+    }
+    if (!item_vec.empty() && item_vec.back().key_ == iter.get_key()) {
+      // 如果key相同，则只保留最新的事务修改的记录即可
+      // 且这个记录既然已经存在于item_vec中，则其肯定满足了事务的可见性判断
+      continue;
+    }
+    item_vec.emplace_back(iter.get_key(), iter.get_value(), skiplist_idx, 0,
+                          iter.get_tranc_id());
+  }
+}
+
 HeapIterator MemTable::iters_preffix(const std::string &preffix,
                                      uint64_t tranc_id) {
-  // TODO: Lab2.3 MemTable 的前缀迭代器
-  // ? 加读锁, 对所有表调用 begin_preffix/end_preffix 遍历前缀范围
-  // ? 过滤事务可见性, 同 key 只保留最新版本
-  return {};
+  std::shared_lock<std::shared_mutex> slk1(cur_mtx);
+  std::shared_lock<std::shared_mutex> slk2(frozen_mtx);
+  std::vector<SearchItem> item_vec;
+  int table_idx = 0;
+
+  set_heap_iterator_item_prefix(item_vec, current_table, table_idx,
+                                 preffix, tranc_id);
+  spdlog::trace("MemTable--iters_preffix(): get range from curent table");
+
+  for (auto ft = frozen_tables.begin(); ft != frozen_tables.end(); ft++) {
+    table_idx++;
+    set_heap_iterator_item_prefix(item_vec, *ft, table_idx,
+                                 preffix, tranc_id);
+    spdlog::trace("MemTable--iters_preffix(): get range from table{}",
+                    table_idx);
+  }
+  return HeapIterator(item_vec, tranc_id);
+}
+
+void static set_heap_iterator_monotony_predicate(std::vector<SearchItem> &item_vec,
+  std::shared_ptr<SkipList> table_ptr, uint64_t skiplist_idx,
+   std::function<int(const std::string &)> predicate, uint64_t tranc_id) {
+  auto begin_predicate = table_ptr->iters_monotony_predicate(predicate)->first;
+  auto end_predicate = table_ptr->iters_monotony_predicate(predicate)->second;
+  for (auto iter = begin_predicate; iter != end_predicate; ++iter) {
+    if (tranc_id != 0 && iter.get_tranc_id() > tranc_id) {
+      continue;
+    }
+    if (!item_vec.empty() && item_vec.back().key_ == iter.get_key()) {
+      // 如果key相同，则只保留最新的事务修改的记录即可
+      // 且这个记录既然已经存在于item_vec中，则其肯定满足了事务的可见性判断
+      continue;
+    }
+    item_vec.emplace_back(iter.get_key(), iter.get_value(), skiplist_idx, 0,
+                          iter.get_tranc_id());
+  }
 }
 
 std::optional<std::pair<HeapIterator, HeapIterator>>
 MemTable::iters_monotony_predicate(
     uint64_t tranc_id, std::function<int(const std::string &)> predicate) {
-  // TODO: Lab2.3 MemTable 的谓词查询迭代器起始范围
-  // ? 加读锁, 对所有表调用 iters_monotony_predicate 获取结果
-  // ? 过滤事务可见性, 同 key 只保留最新版本
   // ? 若结果为空返回 nullopt; 否则返回 make_pair(HeapIterator(item_vec, tranc_id, true), HeapIterator{})
-  return std::nullopt;
+  std::shared_lock<std::shared_mutex> slk1(cur_mtx);
+  std::shared_lock<std::shared_mutex> slk2(frozen_mtx);
+  std::vector<SearchItem> item_vec;
+  int table_idx = 0;
+
+  set_heap_iterator_monotony_predicate(item_vec, current_table, table_idx,
+                                 predicate, tranc_id);
+  spdlog::trace("MemTable--iters_monotony_predicate(): get range from curent table");
+
+  for (auto ft = frozen_tables.begin(); ft != frozen_tables.end(); ft++) {
+    table_idx++;
+    set_heap_iterator_monotony_predicate(item_vec, *ft, table_idx,
+                                 predicate, tranc_id);
+    spdlog::trace("MemTable--iters_monotony_predicate(): get range from table{}",
+                    table_idx);
+  }
+   if (item_vec.empty()) {
+    spdlog::trace(
+        "MemTable--iters_monotony_predicate(): No matching keys found");
+
+    return std::nullopt;
+  }
+  return std::make_pair(HeapIterator(item_vec, tranc_id, true),
+                        HeapIterator{});
 }
 } // namespace tiny_lsm
