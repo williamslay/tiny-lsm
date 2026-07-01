@@ -84,6 +84,8 @@ BlockIterator::value_type BlockIterator::operator*() const {
     throw std::out_of_range("Iterator out of range");
   }
 
+  // TODO：check if there will be some cache coherency problem ?
+  //  will the source block be changed?
   // 使用缓存避免重复解析
   if (!cached_value.has_value()) {
     size_t offset = block->get_offset_at(current_index);

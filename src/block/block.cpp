@@ -352,15 +352,13 @@ size_t Block::cur_size() const {
 
 bool Block::is_empty() const { return offsets.empty(); }
 
+// TODO: check the tranc_id
 BlockIterator Block::begin(uint64_t tranc_id) {
-  // TODO: Lab 3.2 获取begin迭代器
-  // ? 返回指向第 0 个 entry 的迭代器: BlockIterator(shared_from_this(), 0, tranc_id)
-  return BlockIterator(nullptr, 0, 0);
+  return BlockIterator(shared_from_this(), 0, 0);
 }
 
+// TODO: check the tranc_id
 BlockIterator Block::end() {
-  // TODO: Lab 3.2 获取end迭代器
-  // ? 返回指向末尾 (offsets.size()) 的迭代器
-  return BlockIterator(nullptr, 0, 0);
+  return BlockIterator(shared_from_this(), offsets.size(), 0);
 }
 } // namespace tiny_lsm
