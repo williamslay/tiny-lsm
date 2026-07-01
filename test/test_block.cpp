@@ -38,30 +38,30 @@ protected:
         // Entry 3: "orange" -> "orange3"
         6, 0,                              // key_len = 6
         'o', 'r', 'a', 'n', 'g', 'e',      // key
-        7, 0,                              // value_len = 6
+        7, 0,                              // value_len = 7
         'o', 'r', 'a', 'n', 'g', 'e', '3', // value
         3, 0, 0, 0, 0, 0, 0, 0,            // tranc_id = 3
 
         // Entry 4: "orange" -> "orange2"
         6, 0,                              // key_len = 6
         'o', 'r', 'a', 'n', 'g', 'e',      // key
-        7, 0,                              // value_len = 6
+        7, 0,                              // value_len = 7
         'o', 'r', 'a', 'n', 'g', 'e', '2', // value
         2, 0, 0, 0, 0, 0, 0, 0,            // tranc_id = 2
 
         // Entry 5: "orange" -> "orange1"
         6, 0,                              // key_len = 6
         'o', 'r', 'a', 'n', 'g', 'e',      // key
-        7, 0,                              // value_len = 6
+        7, 0,                              // value_len = 7
         'o', 'r', 'a', 'n', 'g', 'e', '1', // value
         1, 0, 0, 0, 0, 0, 0, 0,            // tranc_id = 1
 
         // Offset Section (每个entry的起始位置)
         0, 0,  // offset[0] = 0
-        20, 0, // offset[1] = 12 (第二个entry的起始位置)
-        44, 0, // offset[2] = 24 (第三个entry的起始位置)
-        69, 0, // offset[3] = 36 (第四个entry的起始位置)
-        94, 0, // offset[4] = 48 (第五个entry的起始位置)
+        20, 0, // offset[1] = 20 (第二个entry的起始位置)
+        44, 0, // offset[2] = 44 (第三个entry的起始位置)
+        69, 0, // offset[3] = 69 (第四个entry的起始位置)
+        94, 0, // offset[4] = 94 (第五个entry的起始位置)
 
         // Num of elements
         5, 0 // num_elements = 5
