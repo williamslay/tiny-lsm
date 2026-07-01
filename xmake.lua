@@ -4,6 +4,7 @@ set_version("0.0.1")
 set_languages("c++20")
 
 add_rules("mode.debug", "mode.release", "mode.coverage")
+set_defaultmode("release")
 
 -- 在 coverage 模式下设置 flags
 if is_mode("coverage") then
@@ -335,6 +336,8 @@ task("run-all-tests")
         print("\27[32mAll tests finished.\27[0m")
     end)
 
+
+-- ============ lldb for debug ============
 local function lldb_context(project, env)
     local function target_names()
         local names = {}
@@ -370,12 +373,9 @@ local function lldb_context(project, env)
     end
 
     local function targetfile(target_name, target)
-        local file = target:targetfile()
-        if not env.os.isfile(file) then
-            local show = env.os.iorunv("xmake", {"show", "-t", target_name})
-            show = show:gsub("\27%[[0-9;]*m", "")
-            file = show:match("targetfile:%s*([^\r\n]+)") or file
-        end
+        local show = env.os.iorunv("xmake", {"show", "-t", target_name})
+        show = show:gsub("\27%[[0-9;]*m", "")
+        local file = show:match("targetfile:%s*([^\r\n]+)") or target:targetfile()
         if not env.os.isfile(file) then
             env.raise("target file not found: %s", file)
         end
@@ -387,6 +387,35 @@ local function lldb_context(project, env)
         program = program,
         targetfile = targetfile
     }
+end
+
+local function lldb_run(project, env, target_name, commands)
+    local lldb = lldb_context(project, env)
+    local resolved_target_name, target = lldb.resolve_target(target_name)
+    local program = lldb.program()
+
+    local function shell_quote(value)
+        return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
+    end
+
+    local lldb_args = ""
+    if commands then
+        for _, arg in ipairs(commands) do
+            lldb_args = lldb_args .. " " .. shell_quote(arg)
+        end
+    end
+
+    local script = table.concat({
+        "set -e",
+        "xmake f -m debug",
+        "trap 'xmake f -m release >/dev/null 2>&1 || true' EXIT",
+        "xmake build " .. shell_quote(resolved_target_name),
+        "targetfile=$(xmake show -t " .. shell_quote(resolved_target_name) .. " | python3 -c 'import re, sys; text = re.sub(r\"\\x1b\\[[0-9;]*m\", \"\", sys.stdin.read()); match = re.search(r\"targetfile\\s*:\\s*([^\\r\\n]+)\", text); print(match.group(1).strip() if match else \"\")')",
+        "if [ -z \"$targetfile\" ]; then echo 'target file not found' >&2; exit 1; fi",
+        shell_quote(program) .. lldb_args .. " -- \"$targetfile\""
+    }, " && ")
+
+    env.os.execv("sh", {"-c", script})
 end
 
 task("lldb")
@@ -403,12 +432,7 @@ task("lldb")
         import("core.project.project")
         import("core.base.option")
 
-        local lldb = lldb_context(project, {os = os, raise = raise})
-        local target_name, target = lldb.resolve_target(option.get("target"))
-        local program = lldb.program()
-
-        os.execv("xmake", {"build", target_name})
-        os.execv(program, {"--", lldb.targetfile(target_name, target)})
+        lldb_run(project, {os = os, raise = raise}, option.get("target"))
     end)
 
 task("lldb-bt")
@@ -425,10 +449,5 @@ task("lldb-bt")
         import("core.project.project")
         import("core.base.option")
 
-        local lldb = lldb_context(project, {os = os, raise = raise})
-        local target_name, target = lldb.resolve_target(option.get("target"))
-        local program = lldb.program()
-
-        os.execv("xmake", {"build", target_name})
-        os.execv(program, {"-b", "-o", "run", "-k", "bt", "--", lldb.targetfile(target_name, target)})
+        lldb_run(project, {os = os, raise = raise}, option.get("target"), {"-b", "-o", "run", "-k", "bt"})
     end)
